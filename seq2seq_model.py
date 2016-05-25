@@ -96,3 +96,126 @@ class Seq2SeqModel(object):
     if num_layers > 1:
       cell = tf.nn.rnn_cell.MultiRNNCell([single_cell] * num_layers)
 
+
+  def get_batch(self, data, bucket_id):
+    """
+       Get a random batch of data from the specified bucket, prepare for step.
+
+       To feed data in step(..) it must be a list of batch-major vectors, while
+       data here contains single length-major cases. 
+       So the main logic of this function is to re-index data cases to be in the
+       proper format for feeding
+
+       Args:
+            * data : a tuple of size len(self.buckets) in which each element contains
+                     lists of pairs of input and output data that we use to create a batch.
+            * bucket_id : integer, which bucket to get the batch for.
+
+       Returns:
+            The triple ( encoder_inputs, decoder_inputs, target_weights ) for
+            the constructed batch that has proper formant to call step(...) later.
+    """
+    encoder_size, decoder_size = self.buckets[bucket_id]
+    encoder_inputs, decoder_inputs = [], []
+
+    # Get a random batch of encoder and decoder inputs from data,
+    # pad them if need, reverse encoder inputs and add GO to decoder.
+
+    for _ in xrange(self.batch_size):
+      encoder_input, decoder_input = random.choice(data[bucket_id])
+
+      # Encoder inputs are padded and then reversed.
+      # Conversation model ... need to reverse ???
+      # --> reverse operation do not performed
+      # i.e., 214 532 33323 55 PAD_ID
+      encoder_pad = [data_utils.PAD_ID] * (encoder_size - len(encoder_input))
+      encoder_inputs.append(list(reversed(encoder_input + encoder_pad)))
+      encoder_inputs.append(list(encoder_input + encoder_pad))
+
+      # Decoder inputs get an extra "GO" symbol, and are padded then.
+      # i.e., GO_ID 323 242 525 123 EOS_ID PAD_ID PAD_ID PAD_ID PAD_ID
+      decoder_pad_size = decoder_size - len(decoder_input) - 1
+      decoder_inputs.append([data_utils.GO_ID] + decoder_input + [data_utils.PAD_ID]*decoder_pad_size)
+
+
+    # Now we create batch-major vectors from the data selected above.
+    batch_encoder_inputs, batch_decoder_inputs, batch_weights = [], [], []
+
+    # Batch encoder inputs are just re-indexed encoder_inputs
+    for length_idx in xrange(encoder_size):
+      batch_encoder_inputs.append( np.array( [encoder_inputs[batch_idx][length_idx] for batch_idx in xrange(self.batchsize)], dtype=np.int32) )
+     
+
+    # Batch decoder inputs are re-indexed decoder_inputs, we create weights.
+    # What is the weights?
+
+    for length_idx in xrange(decoder_size):
+      batch_decoder_inputs.append( np.array([decoder_intpus[batch_idx][length_idx] for batch_idx in xrange(self.batch_size)], dtype=np.int32) )
+
+      # Create target_weights to be 0 for targets that are padding.
+      # weights of padded zero target are 0 
+      batch_weight = np.ones(self.batch_size, dtype=np.float32)
+      for batch_idx in xrange(self.batch_size):
+        if length_idx < decoder_size -1 :
+          target = decoder_inputs[batch_idx][length_idx + 1]
+        if length_idx == decoder_size -1 or target == data_utils.PAD_ID:
+          batch_weight[batch_idx] = 0.0
+
+      batch_weights.append(batch_weight)
+    return batch_encoder_inputs, batch_decoder_inputs, batch_weights
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+         
+       
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
