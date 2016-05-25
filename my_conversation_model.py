@@ -33,10 +33,10 @@ FLAGS = tf.app.flags.FLAGS
 
 
 
-_buckets = [ (5,10), (10,15), (20,25), (30,40), (40,50) ] 
+_buckets = [ (5,10), (10,15), (20,25), (30,40), (40,50), (50,60)]
 
 
-def read_data(source_path,target_path, max_size=None): 
+def read_data(source_path,target_path, max_size=None):
 	""" Read data from source and targt files and put into buckets.
 
 	Args:
@@ -48,11 +48,11 @@ def read_data(source_path,target_path, max_size=None):
 		   if 0 or None, data files will be read completely ( no limit )
 
 	Returns:
-		data_set : a list of length len(_buckets); 
+		data_set : a list of length len(_buckets);
 			   data_set[n] contains a list of (source, target) paris read from the
 			   provided data filed that fit into the n-th bucket
 			   i.e., such that len(source) < _buckets[n][0] and
-			                   len(target) < _buckets[n][1] 
+			                   len(target) < _buckets[n][1]
 			         source and target are lists of token-ids.
         """
 
@@ -63,12 +63,12 @@ def read_data(source_path,target_path, max_size=None):
 			source, target = A_file.readline(), Q_file.readline()
 			counter = 0
 			while source and target and ( not max_size or counter < max_size):
-				counter += 1 
+				counter += 1
 				if counter % 10000 == 0:
 					print(" reading data line %d" % ( counter ))
 					sys.stdout.flush()
-				source_ids = [int(x) for x in source.split()]
-				target_ids = [int(x) for x in target.split()]
+				source_ids = [int(x)+3 for x in source.split()]
+				target_ids = [int(x)+3 for x in target.split()]
 				target_ids.append(data_utils.EOS_ID)
 				for bucket_id, (source_size, target_size) in enumerate(_buckets):
 					if len(source_ids) < source_size and len(target_ids) < target_size:
@@ -77,7 +77,7 @@ def read_data(source_path,target_path, max_size=None):
 				source, target = A_file.readline(),Q_file.readline()
 	return data_set
 
-		
+
 
 
 
@@ -119,7 +119,7 @@ def create_model(session, forward_only):
 		print("Created model with fresh parameters.")
 		session.run(tf.initialize_all_variables())
 	return model
-					    
+
 
 
 def train():
@@ -127,7 +127,7 @@ def train():
 
 
    print ("Preparing move conversaion data in %s" %FLAGS.data_dir)
-	
+
 
    with tf.Session() as sess:
       # Create model
@@ -139,22 +139,51 @@ def train():
       print ("Reading Testing and Training data" )
       train_set = read_data('../data/Train_Answer_token_ids.txt','../data/Train_Question_token_ids.txt')
       test_set = read_data('../data/Test_Answer_token_ids.txt','../data/Test_Question_token_ids.txt')
-
+      print train_set[0][2]
       train_bucket_sizes = [len(train_set[b]) for b in xrange(len(_buckets))]
       train_total_size = float(sum(train_bucket_sizes))
 
       print train_bucket_sizes
       print "%d " % (train_total_size)
 
+
       # A bucket scale is a list of increasing numbers from 0 to 1 that we'll use
-      # to select a bucket. Length of [scale[i], scale[i+1]] is proportional to 
+      # to select a bucket. Length of [scale[i], scale[i+1]] is proportional to
       # the size if i-th training bucket, as used later.
 
       train_buckets_scale = [sum(train_bucket_sizes[:i+1]) / train_total_size for i in xrange(len(train_bucket_sizes))]
 
       print train_buckets_scale
-      
-      
+
+
+      step_time, loss = 0.0, 0.0
+      current_step = 0
+      previous_losses = []
+      while True:
+		  #Choose a bucket according to data distribution. We pick a random number in [0,1] and use the corresponding interval in train_buckets_scale.
+		  random_number_01 = np.random.random_sample()
+		  bucket_id = min( [i for i in xrange(len(train_buckets_scale))
+                         if train_buckets_scale[i] > random_number_01] )
+		  print bucket_id
+		  start_time = time.time()
+		  encoder_inputs, decoder_inputs, target_weights = model.get_batch(train_set, bucket_id)
+
+		  # encoder_inputs = [# of length][# of batch_size]
+		  print np.shape(encoder_inputs)
+
+		  _, step_loss, _ = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, False)
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
