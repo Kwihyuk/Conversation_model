@@ -137,14 +137,14 @@ def train():
 
       # Read data into buckets and comput their sizes.
       print ("Reading Testing and Training data" )
-      train_set = read_data('../data/Train_Answer_token_ids.txt','../data/Train_Question_token_ids.txt',40000)
-      test_set = read_data('../data/Test_Answer_token_ids.txt','../data/Test_Question_token_ids.txt',10000)
-      print train_set[0][2]
+      train_set = read_data('../data/Train_Answer_token_ids.txt','../data/Train_Question_token_ids.txt')
+      test_set = read_data('../data/Test_Answer_token_ids.txt','../data/Test_Question_token_ids.txt')
+      #print train_set[0][2]
       train_bucket_sizes = [len(train_set[b]) for b in xrange(len(_buckets))]
       train_total_size = float(sum(train_bucket_sizes))
 
-      print train_bucket_sizes
-      print "%d " % (train_total_size)
+      #print train_bucket_sizes
+      #print "%d " % (train_total_size)
 
 
       # A bucket scale is a list of increasing numbers from 0 to 1 that we'll use
@@ -153,7 +153,7 @@ def train():
 
       train_buckets_scale = [sum(train_bucket_sizes[:i+1]) / train_total_size for i in xrange(len(train_bucket_sizes))]
 
-      print train_buckets_scale
+      #print train_buckets_scale
 
 
       step_time, loss = 0.0, 0.0
@@ -164,12 +164,12 @@ def train():
 		  random_number_01 = np.random.random_sample()
 		  bucket_id = min( [i for i in xrange(len(train_buckets_scale))
                          if train_buckets_scale[i] > random_number_01] )
-		  print bucket_id
+		  #print bucket_id
 		  start_time = time.time()
 		  encoder_inputs, decoder_inputs, target_weights = model.get_batch(train_set, bucket_id)
 
 		  # encoder_inputs = [# of length][# of batch_size]
-		  print np.shape(encoder_inputs)
+		  #print np.shape(encoder_inputs)
 
 		  _, step_loss, _ = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, False)
 
@@ -251,11 +251,11 @@ def decode():
 
 
 
-def main():
-	if arg[0] == 0
-	train()
-
-	decode()
+def main(argv):
+	if argv[0] == 0:
+		train()
+	elif argv[0] == 1:
+		decode()
 
 if __name__ == "__main__":
 	tf.app.run()
