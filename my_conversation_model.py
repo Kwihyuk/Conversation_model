@@ -207,30 +207,55 @@ def train():
 
 
 
+def decode():
+   with tf.Session() as sess:
+	   # Create model and load parameters.
+	   # second arguments means this model are not Training
+	   model = create_model(sess, True)
+	   # we decode one sentence at a time
+	   model.batch_size = 1
+
+	   # Load vocabularies
+
+	   vocab_path = os.path.join(FLAGS.data_dir,"Word_map.txt")
+	   vocab, _ = data_utils.initialize_vocabulary(vocab_path)
+
+	   sys.stdout.write("> ")
+	   sys.stdout.flush()
+	   sentence = sys.stdin.readline()
+
+	   while sentence:
+		   # Get token-ids for the input sentence
+		   token_ids = data_utils.sentence_to_token_ids(tf.compat.as_bytes(sentence), vocab)
+		   # Which bucket oes it belong to?
+		   bucket_id = min([b for b in xrange(len(_buckets)) if _bucket[b][0] > len(token_ids)])
+
+		   # Get a 1-element batch to feed the sentence to the model.
+		   encoder_inputs, decoder_inputs, target_weights = model.get_batch({bucket_id : [(token_ids,[])]},bucket_id)
+		   # Get output logits for the sentence.
+		   _, _, output_logits = model.step(sess. encoder_inputs, decoder_inputs, target_weights, bucket_id, True)
+
+		   # This is a greedy decoder - outputs are just argmaxes of output_logits.
+		   outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
+
+		   # If there is an EOS symbol in outputs, cut them at that point.
+
+		   if data_utils.EOD_ID in outputs:
+			   outputs = outputs[:outputs.index(data_utils.EOD_ID)]
+		   # Print outputs
+		   print (" ".join([tf.compat.as_str(vocab[output]) for output in outputs]))
+		   print ("> ", end="")
+		   sys.stdout.flush()
+		   sentence = sys.stdin.readline()
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-def main(unused_args):
+def main():
+	if arg[0] == 0
 	train()
-#	data_set = read_data()
-#	print data_set[0][0]
-#
-#	with tf.Session() as sess:
-#		print ("Test")
-#	model = create_model(sess,False)
-#	sess.run(tf.initialize_all_variables())
+
+	decode()
 
 if __name__ == "__main__":
 	tf.app.run()
