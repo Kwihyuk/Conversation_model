@@ -20,7 +20,7 @@ tf.app.flags.DEFINE_float("max_gradient_norm", 		5.0, "Clip gradients to this no
 tf.app.flags.DEFINE_integer("batch_size",      		64, "Batch size to use during training.")
 tf.app.flags.DEFINE_integer("cell_size",             	1024, "Size of each model layer.")
 tf.app.flags.DEFINE_integer("num_layers", 		1, "Number of layers in the model.")
-tf.app.flags.DEFINE_integer("source_target_vocab_size",	40000, "vocabulary size.")
+tf.app.flags.DEFINE_integer("source_target_vocab_size",	40874, "vocabulary size.")
 tf.app.flags.DEFINE_string("data_dir", 			"../data", "Data directory")
 tf.app.flags.DEFINE_string("train_dir", 		"./train_model", "Training directory.")
 tf.app.flags.DEFINE_integer("max_train_data_size", 	0, "Limit on the size of training data (0: no limit).")
@@ -137,8 +137,8 @@ def train():
 
       # Read data into buckets and comput their sizes.
       print ("Reading Testing and Training data" )
-      train_set = read_data('../data/Train_Answer_token_ids.txt','../data/Train_Question_token_ids.txt')
-      test_set = read_data('../data/Test_Answer_token_ids.txt','../data/Test_Question_token_ids.txt')
+      train_set = read_data('../data/Train_Answer_token_ids.txt','../data/Train_Question_token_ids.txt',40000)
+      test_set = read_data('../data/Test_Answer_token_ids.txt','../data/Test_Question_token_ids.txt',10000)
       print train_set[0][2]
       train_bucket_sizes = [len(train_set[b]) for b in xrange(len(_buckets))]
       train_total_size = float(sum(train_bucket_sizes))
@@ -172,6 +172,39 @@ def train():
 		  print np.shape(encoder_inputs)
 
 		  _, step_loss, _ = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, False)
+
+		  step_time += (time.time() - start_time)
+		  loss += step_loss / FLAGS.steps_per_checkpoint
+		  current_step += 1
+		  #sys.Pause()
+
+		  if current_step % FLAGS.steps_per_checkpoint ==0:
+			  # Print statistics for the previous epoch.
+			  perplexity = math.exp(loss) if loss < 300 else float('inf')
+			  print ("Global step : %d learning rate %.5f step-time %.2f perplexity = %.2f" % (model.global_step.eval(),model.learning_rate.eval(), step_time, perplexity))
+
+			  # Decrease learning rate if no improvement was seen over last 3 times.
+			  if len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
+				  sess.run(model.learning_rate_decay_op)
+			  previous_losses.append(loss)
+
+			  #Save checkpoint and zero timer and loss.
+			  checkpoint_path = os.path.join(FLAGS.train_dir, "conversation.ckpt")
+			  model.saver.save(sess,checkpoint_path, global_step=model.global_step)
+			  step_time, loss =0.0, 0.0
+
+			  # Run evals on test set and print their perplexity
+			  for bucket_id in xrange(len(_buckets)):
+				  if len(test_set[bucket_id]) == 0:
+					  print(" eval: empty bucket %d" %(bucket_id))
+					  continue
+				  encoder_inputs, decoder_inputs, target_weights = model.get_batch(test_set,bucket_id)
+				  _, eval_loss, _ = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, True)
+				  eval_ppx = math.exp(eval_loss) if eval_loss < 300 else float('inf')
+
+				  print( "test: bucket : %d perplexity : %.2f" % (bucket_id,eval_ppx))
+			  sys.stdout.flush()
+
 
 
 
