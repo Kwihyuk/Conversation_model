@@ -120,7 +120,7 @@ class Seq2SeqModel(object):
       if output_projection is not None:
         for b in xrange(len(buckets)):
           self.outputs[b] = [ tf.matmul(output, output_projection[0]) + output_projection[1]
-          for output in self.output[b] ]
+          for output in self.outputs[b] ]
     else:
       self.outputs, self.losses = tf.nn.seq2seq.model_with_buckets( self.encoder_inputs, self.decoder_inputs, targets, self.target_weights, buckets, lambda x, y: seq2seq_f(x,y,False), softmax_loss_function = softmax_loss_function)
 

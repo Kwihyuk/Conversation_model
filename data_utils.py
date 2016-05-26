@@ -18,6 +18,12 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import re
+
+from six.moves import urllib
+from tensorflow.python.platform import gfile
+
+
 _PAD = b"_PAD"
 _GO = b"_GO"
 _EOS = b"_EOS"
@@ -28,6 +34,10 @@ PAD_ID = 0
 GO_ID = 1
 EOS_ID = 2
 UNK_ID = 3
+
+_WORD_SPLIT = re.compile(b"([.,!?\"':;)(])")
+_DIGIT_RE = re.compile(br"\d")
+
 
 def initialize_vocabulary(vocabulary_path):
   """Initialize vocabulary from file.
@@ -87,3 +97,10 @@ def sentence_to_token_ids(sentence, vocabulary,
   # Normalize digits by 0 before looking words up in the vocabulary.
   return [vocabulary.get(re.sub(_DIGIT_RE, b"0", w), UNK_ID) for w in words]
 
+
+def basic_tokenizer(sentence):
+  """ very basic tokenizer: split the sentence into a list of tokens."""
+  words = []
+  for space_separated_fragment in sentence.strip().split():
+    words.extend(re.split(_WORD_SPLIT, space_separated_fragment))
+    return [w for w in words if w] 

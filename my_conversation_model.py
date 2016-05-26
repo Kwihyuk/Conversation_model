@@ -19,7 +19,7 @@ tf.app.flags.DEFINE_float("learning_rate_decay_factor", 0.99, "Learning rate dec
 tf.app.flags.DEFINE_float("max_gradient_norm", 		5.0, "Clip gradients to this norm.")
 tf.app.flags.DEFINE_integer("batch_size",      		64, "Batch size to use during training.")
 tf.app.flags.DEFINE_integer("cell_size",             	1024, "Size of each model layer.")
-tf.app.flags.DEFINE_integer("num_layers", 		1, "Number of layers in the model.")
+tf.app.flags.DEFINE_integer("num_layers", 		2, "Number of layers in the model.")
 tf.app.flags.DEFINE_integer("source_target_vocab_size",	40874, "vocabulary size.")
 tf.app.flags.DEFINE_string("data_dir", 			"../data", "Data directory")
 tf.app.flags.DEFINE_string("train_dir", 		"./train_model", "Training directory.")
@@ -64,11 +64,11 @@ def read_data(source_path,target_path, max_size=None):
 			counter = 0
 			while source and target and ( not max_size or counter < max_size):
 				counter += 1
-				if counter % 10000 == 0:
+				if counter % 5000 == 0:
 					print(" reading data line %d" % ( counter ))
 					sys.stdout.flush()
-				source_ids = [int(x)+3 for x in source.split()]
-				target_ids = [int(x)+3 for x in target.split()]
+				source_ids = [int(x) for x in source.split()]
+				target_ids = [int(x) for x in target.split()]
 				target_ids.append(data_utils.EOS_ID)
 				for bucket_id, (source_size, target_size) in enumerate(_buckets):
 					if len(source_ids) < source_size and len(target_ids) < target_size:
@@ -218,9 +218,9 @@ def decode():
 	   # Load vocabularies
 
 	   vocab_path = os.path.join(FLAGS.data_dir,"Word_map.txt")
-	   vocab, _ = data_utils.initialize_vocabulary(vocab_path)
+	   vocab, Q_vocab = data_utils.initialize_vocabulary(vocab_path)
 
-	   sys.stdout.write("> ")
+	   sys.stdout.write("Input >> ")
 	   sys.stdout.flush()
 	   sentence = sys.stdin.readline()
 
@@ -228,23 +228,24 @@ def decode():
 		   # Get token-ids for the input sentence
 		   token_ids = data_utils.sentence_to_token_ids(tf.compat.as_bytes(sentence), vocab)
 		   # Which bucket oes it belong to?
-		   bucket_id = min([b for b in xrange(len(_buckets)) if _bucket[b][0] > len(token_ids)])
+		   bucket_id = min([b for b in xrange(len(_buckets)) if _buckets[b][0] > len(token_ids)])
 
 		   # Get a 1-element batch to feed the sentence to the model.
 		   encoder_inputs, decoder_inputs, target_weights = model.get_batch({bucket_id : [(token_ids,[])]},bucket_id)
 		   # Get output logits for the sentence.
-		   _, _, output_logits = model.step(sess. encoder_inputs, decoder_inputs, target_weights, bucket_id, True)
+		   _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, True)
 
 		   # This is a greedy decoder - outputs are just argmaxes of output_logits.
 		   outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
 
 		   # If there is an EOS symbol in outputs, cut them at that point.
 
-		   if data_utils.EOD_ID in outputs:
-			   outputs = outputs[:outputs.index(data_utils.EOD_ID)]
+		   if data_utils.EOS_ID in outputs:
+			   outputs = outputs[:outputs.index(data_utils.EOS_ID)]
+		   #print Q_vocab[outputs[0]]
 		   # Print outputs
-		   print (" ".join([tf.compat.as_str(vocab[output]) for output in outputs]))
-		   print ("> ", end="")
+		   print ("Output >> ".join([tf.compat.as_str(Q_vocab[output]) for output in outputs]))
+		   print ("Input >> ")
 		   sys.stdout.flush()
 		   sentence = sys.stdin.readline()
 
@@ -252,10 +253,11 @@ def decode():
 
 
 def main(argv):
-	if argv[0] == 0:
+#	print argv
+#	if argv == 0:
 		train()
-	elif argv[0] == 1:
-		decode()
+#	elif argv == 1:
+#		decode()
 
 if __name__ == "__main__":
 	tf.app.run()
