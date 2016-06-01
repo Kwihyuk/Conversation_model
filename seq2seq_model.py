@@ -45,7 +45,9 @@ class Seq2SeqModel(object):
 
   def __init__(self, source_target_vocab_size, buckets, size,
                num_layers, max_gradient_norm, batch_size, learning_rate,
-               learning_rate_decay_factor, num_samples = 4096, forward_only=False):
+               learning_rate_decay_factor,
+               scheduling_rate, scheduling_rate_decay_factor,
+               num_samples = 4096, forward_only=False):
     """Create the model.
 
     Args:
@@ -63,6 +65,8 @@ class Seq2SeqModel(object):
         changed after initialization if this is convenient, e.g., for decoding.
       learning_rate: learning rate to start with.
       learning_rate_decay_factor: decay learning rate by this much when needed.
+      scheduling_rate:
+      scheduling_rate_decay_factor:
       forward_only: if set, we do not construct the backward pass in the model.
     """
     self.source_target_vocab_size = source_target_vocab_size
@@ -70,6 +74,10 @@ class Seq2SeqModel(object):
     self.batch_size = batch_size
     self.learning_rate = tf.Variable(float(learning_rate), trainable=False)
     self.learning_rate_decay_op = self.learning_rate.assign(self.learning_rate * learning_rate_decay_factor)
+
+    self.scheduling_rate = tf.Variable(float(scheduling_rate), trainable=False)
+    self.scheduling_rate_decay_op = self.scheduling_rate.assign(self.scheduling_rate * scheduling_rate_decay_factor)
+
     self.global_step = tf.Variable(0, trainable=False)
 
     # If we use sampled softmax, we need an output projection.
@@ -97,7 +105,7 @@ class Seq2SeqModel(object):
       cell = tf.nn.rnn_cell.MultiRNNCell([single_cell] * num_layers)
 
     def seq2seq_f(encoder_inputs, decoder_inputs, do_decode):
-        return seq2seq.embedding_attention_seq2seq( encoder_inputs, decoder_inputs, cell, num_encoder_symbols=source_target_vocab_size, num_decoder_symbols=source_target_vocab_size, embedding_size = size, output_projection = output_projection, feed_previous=do_decode)
+        return seq2seq.embedding_attention_seq2seq( encoder_inputs, decoder_inputs, cell, num_encoder_symbols=source_target_vocab_size, num_decoder_symbols=source_target_vocab_size, embedding_size = size, output_projection = output_projection, feed_previous=do_decode, scheduling_rate = self.scheduling_rate )
 
     self.encoder_inputs = []
     self.decoder_inputs = []

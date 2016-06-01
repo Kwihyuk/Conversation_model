@@ -131,7 +131,8 @@ def _extract_random_output_and_embed(embedding, output_projection=None, update_e
 def attention_decoder(decoder_inputs, initial_state, attention_states, cell,
                       output_size=None, num_heads=1, loop_function=None,
                       dtype=dtypes.float32, scope=None,
-                      initial_state_attention=False):
+                      initial_state_attention=False,
+                      scheduling_rate = 1.0 ):
   """RNN decoder with attention for the sequence-to-sequence model.
 
   In this context "attention" means that, during decoding, the RNN can look up
@@ -162,6 +163,7 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, cell,
       If True, initialize the attentions from the initial state and attention
       states -- useful when we wish to resume decoding from a previously
       stored decoder state and attention states.
+    Scheduled_sampling: it is used for curriculum learning, ( sami bengio's paper )
 
   Returns:
     A tuple of the form (outputs, state), where:
@@ -239,6 +241,11 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, cell,
       a.set_shape([None, attn_size])
     if initial_state_attention:
       attns = attention(initial_state)
+
+    ############################################################
+    ### output generation part #################################
+    ############################################################
+
     for i, inp in enumerate(decoder_inputs):
       if i > 0:
         variable_scope.get_variable_scope().reuse_variables()
@@ -248,15 +255,20 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, cell,
       ##################################################################
       ## in this area, we appied the curriculum learning ##############
       #
-      #random
-      if loop_function is not None and prev is not None:
-        with variable_scope.variable_scope("loop_function", reuse=True):
-          inp = loop_function(prev, i)
+      random_number = tf.random_uniform([1], minval=0, maxval=1)
+      if (tf.greater(random_number,scheduling_rate)) is True :
+        if loop_function is not None and prev is not None:
+          with variable_scope.variable_scope("loop_function", reuse=True):
+            inp = loop_function(prev, i)
+
+
       # Merge input and previous attentions into one vector of the right size.
       input_size = inp.get_shape().with_rank(2)[1]
       if input_size.value is None:
         raise ValueError("Could not infer input size from input: %s" % inp.name)
       x = rnn_cell.linear([inp] + attns, input_size, True)
+
+
       # Run the RNN.
       cell_output, state = cell(x, state)
       # Run the attention mechanism.
@@ -273,6 +285,8 @@ def attention_decoder(decoder_inputs, initial_state, attention_states, cell,
         prev = output
       outputs.append(output)
 
+     ################################################################
+     ################################################################
   return outputs, state
 
 
@@ -284,7 +298,8 @@ def embedding_attention_decoder(decoder_inputs, initial_state, attention_states,
                                 feed_previous=False,
                                 update_embedding_for_previous=True,
                                 dtype=dtypes.float32, scope=None,
-                                initial_state_attention=False):
+                                initial_state_attention=False,
+				scheduling_rate = 1.0 ):
   """RNN decoder with embedding and attention and a pure-decoding option.
 
   Args:
@@ -340,13 +355,16 @@ def embedding_attention_decoder(decoder_inputs, initial_state, attention_states,
       embedding = variable_scope.get_variable("embedding",
                                               [num_symbols, embedding_size])
     #loop_function = _extract_argmax_and_embed( embedding, output_projection, update_embedding_for_previous) if feed_previous else None
-    loop_function = _extract_random_output_and_embed( embedding, output_projection, update_embedding_for_previous) if feed_previous else None
+    loop_function = _extract_random_output_and_embed( embedding, output_projection, update_embedding_for_previous) # if feed_previous else None
     emb_inp = [ embedding_ops.embedding_lookup(embedding, i) for i in decoder_inputs]
 
     return attention_decoder(
-        emb_inp, initial_state, attention_states, cell, output_size=output_size,
-        num_heads=num_heads, loop_function=loop_function,
-        initial_state_attention=initial_state_attention)
+        emb_inp, initial_state, attention_states, cell, 
+        output_size = output_size,
+        num_heads = num_heads, 
+        loop_function = loop_function,
+        initial_state_attention = initial_state_attention,
+        scheduling_rate = scheduling_rate)
 
 
 def embedding_attention_seq2seq(encoder_inputs, decoder_inputs, cell,
@@ -354,7 +372,8 @@ def embedding_attention_seq2seq(encoder_inputs, decoder_inputs, cell,
                                 embedding_size,
                                 num_heads=1, output_projection=None,
                                 feed_previous=False, dtype=dtypes.float32,
-                                scope=None, initial_state_attention=False):
+                                scope=None, initial_state_attention=False,
+				scheduling_rate = 1.0 ):
   """Embedding sequence-to-sequence model with attention.
 
   This model first embeds encoder_inputs by a newly created embedding (of shape
@@ -387,6 +406,7 @@ def embedding_attention_seq2seq(encoder_inputs, decoder_inputs, cell,
     initial_state_attention: If False (default), initial attentions are zero.
       If True, initialize the attentions from the initial state and attention
       states.
+    scheduling_rate : 
 
   Returns:
     A tuple of the form (outputs, state), where:
@@ -424,7 +444,8 @@ def embedding_attention_seq2seq(encoder_inputs, decoder_inputs, cell,
           num_decoder_symbols, embedding_size, num_heads=num_heads,
           output_size=output_size, output_projection=output_projection,
           feed_previous=feed_previous,
-          initial_state_attention=initial_state_attention)
+          initial_state_attention=initial_state_attention,
+          scheduling_rate = scheduling_rate)
 
     # If feed_previous is a Tensor, we construct 2 graphs and use cond.
     def decoder(feed_previous_bool):
@@ -433,11 +454,14 @@ def embedding_attention_seq2seq(encoder_inputs, decoder_inputs, cell,
                                          reuse=reuse):
         outputs, state = embedding_attention_decoder(
             decoder_inputs, encoder_state, attention_states, cell,
-            num_decoder_symbols, embedding_size, num_heads=num_heads,
-            output_size=output_size, output_projection=output_projection,
-            feed_previous=feed_previous_bool,
-            update_embedding_for_previous=False,
-            initial_state_attention=initial_state_attention)
+            num_decoder_symbols, embedding_size, 
+            num_heads = num_heads,
+            output_size = output_size, 
+            output_projection = output_projection,
+            feed_previous = feed_previous_bool,
+            update_embedding_for_previous = False,
+            initial_state_attention = initial_state_attention,
+            scheduling_rate = scheduling_rate)
         #print (outputs)
         return outputs + [state]
 

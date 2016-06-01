@@ -16,6 +16,8 @@ import seq2seq_model
 from six.moves import xrange
 tf.app.flags.DEFINE_float("learning_rate", 		0.5, "Learning rate.")
 tf.app.flags.DEFINE_float("learning_rate_decay_factor", 0.999, "Learning rate decays by this much.")
+tf.app.flags.DEFINE_float("scheduling_rate",		1,   "Scheduling rate.")
+tf.app.flags.DEFINE_float("scheduling_rate_decay_factor", 0.99999, "Scheduling rate decays by this much.")
 tf.app.flags.DEFINE_float("max_gradient_norm", 		5.0, "Clip gradients to this norm.")
 tf.app.flags.DEFINE_integer("batch_size",      		64, "Batch size to use during training.")
 tf.app.flags.DEFINE_integer("cell_size",             	512, "Size of each model layer.")
@@ -25,7 +27,6 @@ tf.app.flags.DEFINE_string("data_dir", 			"../data", "Data directory")
 tf.app.flags.DEFINE_string("train_dir", 		"./train_model", "Training directory.")
 tf.app.flags.DEFINE_integer("max_train_data_size", 	0, "Limit on the size of training data (0: no limit).")
 tf.app.flags.DEFINE_integer("steps_per_checkpoint", 	200, "How many training steps to do per checkpoint.")
-tf.app.flags.DEFINE_boolean("self_test", 		False, "Run a self-test if this is set to True.")
 
 FLAGS = tf.app.flags.FLAGS
 
@@ -110,6 +111,8 @@ def create_model(session, forward_only):
 					    FLAGS.num_layers, FLAGS.max_gradient_norm,
 					    FLAGS.batch_size, FLAGS.learning_rate,
 					    FLAGS.learning_rate_decay_factor,
+                                            FLAGS.scheduling_rate,
+                                            FLAGS.scheduling_rate_decay_factor,
 					    forward_only = forward_only)
 
 	ckpt = tf.train.get_checkpoint_state(FLAGS.train_dir)
@@ -182,7 +185,7 @@ def train():
 		  if current_step % FLAGS.steps_per_checkpoint ==0:
 			  # Print statistics for the previous epoch.
 			  perplexity = math.exp(loss) if loss < 300 else float('inf')
-			  print ("Global step : %d learning rate %.5f step-time %.2f perplexity = %.2f" % (model.global_step.eval(),model.learning_rate.eval(), step_time, perplexity))
+			  print ("Global step : %d learning rate %.5f scheduling rate %.5f step-time %.2f perplexity = %.2f" % (model.global_step.eval(),model.learning_rate.eval(), model.scheduling_rate.eval(), step_time, perplexity))
 
 			  # Decrease learning rate if no improvement was seen over last 3 times.
 			  if len(previous_losses) > 2 and loss > max(previous_losses[-3:]):
@@ -206,6 +209,7 @@ def train():
 
 				  print( "test procedure : bucket : %d perplexity : %.2f" % (bucket_id,eval_ppx))
 			  sys.stdout.flush()
+		  sess.run(model.scheduling_rate_decay_op)
 
 
 
