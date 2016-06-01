@@ -15,17 +15,16 @@ import seq2seq_model
 
 from six.moves import xrange
 tf.app.flags.DEFINE_float("learning_rate", 		0.5, "Learning rate.")
-tf.app.flags.DEFINE_float("learning_rate_decay_factor", 0.99, "Learning rate decays by this much.")
+tf.app.flags.DEFINE_float("learning_rate_decay_factor", 0.999, "Learning rate decays by this much.")
 tf.app.flags.DEFINE_float("max_gradient_norm", 		5.0, "Clip gradients to this norm.")
 tf.app.flags.DEFINE_integer("batch_size",      		64, "Batch size to use during training.")
-tf.app.flags.DEFINE_integer("cell_size",             	1024, "Size of each model layer.")
-tf.app.flags.DEFINE_integer("num_layers", 		2, "Number of layers in the model.")
+tf.app.flags.DEFINE_integer("cell_size",             	512, "Size of each model layer.")
+tf.app.flags.DEFINE_integer("num_layers", 		3, "Number of layers in the model.")
 tf.app.flags.DEFINE_integer("source_target_vocab_size",	40874, "vocabulary size.")
 tf.app.flags.DEFINE_string("data_dir", 			"../data", "Data directory")
 tf.app.flags.DEFINE_string("train_dir", 		"./train_model", "Training directory.")
 tf.app.flags.DEFINE_integer("max_train_data_size", 	0, "Limit on the size of training data (0: no limit).")
 tf.app.flags.DEFINE_integer("steps_per_checkpoint", 	200, "How many training steps to do per checkpoint.")
-tf.app.flags.DEFINE_boolean("decode",			False, "Set to True for interactive decoding.")
 tf.app.flags.DEFINE_boolean("self_test", 		False, "Run a self-test if this is set to True.")
 
 FLAGS = tf.app.flags.FLAGS
@@ -33,8 +32,9 @@ FLAGS = tf.app.flags.FLAGS
 
 
 
-_buckets = [ (5,10), (10,15), (20,25), (30,40), (40,50), (50,60)]
+#_buckets = [ (5,10), (10,15), (20,25), (30,40), (40,50), (50,60)]
 
+_buckets = [ (5,5), (10,10), (15,15), (20,20), (30,30), (40,40), (50,50)]
 
 def read_data(source_path,target_path, max_size=None):
 	""" Read data from source and targt files and put into buckets.
@@ -75,6 +75,7 @@ def read_data(source_path,target_path, max_size=None):
 						data_set[bucket_id].append([source_ids, target_ids])
 						break
 				source, target = A_file.readline(),Q_file.readline()
+	print (" reading data line %d ( total data ) done" % (counter) )
 	return data_set
 
 
@@ -199,10 +200,11 @@ def train():
 					  print(" eval: empty bucket %d" %(bucket_id))
 					  continue
 				  encoder_inputs, decoder_inputs, target_weights = model.get_batch(test_set,bucket_id)
+				  #print (np.shape(encoder_inputs))
 				  _, eval_loss, _ = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, True)
 				  eval_ppx = math.exp(eval_loss) if eval_loss < 300 else float('inf')
 
-				  print( "test: bucket : %d perplexity : %.2f" % (bucket_id,eval_ppx))
+				  print( "test procedure : bucket : %d perplexity : %.2f" % (bucket_id,eval_ppx))
 			  sys.stdout.flush()
 
 
@@ -220,35 +222,57 @@ def decode():
 	   vocab_path = os.path.join(FLAGS.data_dir,"Word_map.txt")
 	   vocab, Q_vocab = data_utils.initialize_vocabulary(vocab_path)
 
-	   sys.stdout.write("Input >> ")
-	   sys.stdout.flush()
-	   sentence = sys.stdin.readline()
 
-	   while sentence:
+	   while 1:
 		   # Get token-ids for the input sentence
+		   sys.stdout.write("Input >> ")
+		   sys.stdout.flush()
+		   sentence = sys.stdin.readline()
 		   token_ids = data_utils.sentence_to_token_ids(tf.compat.as_bytes(sentence), vocab)
+		   #print sentence
+		   #print token_ids
+		   #print np.shape(token_ids)
 		   # Which bucket oes it belong to?
 		   bucket_id = min([b for b in xrange(len(_buckets)) if _buckets[b][0] > len(token_ids)])
 
 		   # Get a 1-element batch to feed the sentence to the model.
 		   encoder_inputs, decoder_inputs, target_weights = model.get_batch({bucket_id : [(token_ids,[])]},bucket_id)
+		   #print np.shape(decoder_inputs)
 		   # Get output logits for the sentence.
 		   _, _, output_logits = model.step(sess, encoder_inputs, decoder_inputs, target_weights, bucket_id, True)
 
+		   bucket_length = (_buckets[bucket_id])[1]
+#		   softmax_output_logits = np.zeros(),dtype=np.float)
+		   #outputs = np.zeros(bucket_length,np.int)
+		   outputs = []
+		   max_outputs = [ int(np.argmax(logit, axis=1)) for logit in output_logits]
+		   
+		  # for i in range(bucket_length):
+		  # 	softmax_output_logits = sess.run(tf.nn.softmax(output_logits[i]))
+		  #	cum_sum = np.cumsum(softmax_output_logits)
+		  #	random_number_02 = np.random.random_sample()
+			#print softmax_output_logits.max()
+			#print softmax_output_logits.argmax()
+#	  	max_outputs.append(softmax_output_logits.argmax())
+		  #	output = min( [j for j in xrange(len(cum_sum)) if cum_sum[j] > random_number_02] )
+		  #	outputs.append(output)
 		   # This is a greedy decoder - outputs are just argmaxes of output_logits.
-		   outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
-
+#		   outputs = [int(np.argmax(logit, axis=1)) for logit in output_logits]
 		   # If there is an EOS symbol in outputs, cut them at that point.
-
-		   if data_utils.EOS_ID in outputs:
-			   outputs = outputs[:outputs.index(data_utils.EOS_ID)]
+#
+#		   if data_utils.EOS_ID in outputs:
+#			   outputs = outputs[:outputs.index(data_utils.EOS_ID)]
+		   if data_utils.EOS_ID in max_outputs:
+		   	   max_outputs = max_outputs[:max_outputs.index(data_utils.EOS_ID)]
 		   #print Q_vocab[outputs[0]]
-		   # Print outputs
-		   print ("Output >> ".join([tf.compat.as_str(Q_vocab[output]) for output in outputs]))
-		   print ("Input >> ")
-		   sys.stdout.flush()
-		   sentence = sys.stdin.readline()
-
+		   #print (outputs)
+#		   print ("sampling output >>")
+#		   print (" ".join([tf.compat.as_str(Q_vocab[output]) for output in outputs]))
+		
+		   #print (max_outputs)
+		   print ("output >>")
+		   print (" ".join([tf.compat.as_str(Q_vocab[output]) for output in max_outputs]))
+		   print("=====================")
 
 
 
@@ -257,7 +281,7 @@ def main(argv):
 #	if argv == 0:
 		train()
 #	elif argv == 1:
-#		decode()
+#	decode()
 
 if __name__ == "__main__":
 	tf.app.run()

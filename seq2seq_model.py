@@ -26,7 +26,7 @@ from six.moves import xrange  # pylint: disable=redefined-builtin
 import tensorflow as tf
 
 from tensorflow.models.rnn.translate import data_utils
-
+import seq2seq
 
 class Seq2SeqModel(object):
   """Sequence-to-sequence model with attention and for multiple buckets.
@@ -45,7 +45,7 @@ class Seq2SeqModel(object):
 
   def __init__(self, source_target_vocab_size, buckets, size,
                num_layers, max_gradient_norm, batch_size, learning_rate,
-               learning_rate_decay_factor, num_samples = 512, forward_only=False):
+               learning_rate_decay_factor, num_samples = 4096, forward_only=False):
     """Create the model.
 
     Args:
@@ -97,7 +97,7 @@ class Seq2SeqModel(object):
       cell = tf.nn.rnn_cell.MultiRNNCell([single_cell] * num_layers)
 
     def seq2seq_f(encoder_inputs, decoder_inputs, do_decode):
-        return tf.nn.seq2seq.embedding_attention_seq2seq( encoder_inputs, decoder_inputs, cell, num_encoder_symbols=source_target_vocab_size, num_decoder_symbols=source_target_vocab_size, embedding_size = size, output_projection = output_projection, feed_previous=do_decode)
+        return seq2seq.embedding_attention_seq2seq( encoder_inputs, decoder_inputs, cell, num_encoder_symbols=source_target_vocab_size, num_decoder_symbols=source_target_vocab_size, embedding_size = size, output_projection = output_projection, feed_previous=do_decode)
 
     self.encoder_inputs = []
     self.decoder_inputs = []
@@ -116,13 +116,14 @@ class Seq2SeqModel(object):
 
 
     if forward_only:
-      self.outputs, self.losses = tf.nn.seq2seq.model_with_buckets( self.encoder_inputs, self.decoder_inputs, targets, self.target_weights, buckets, lambda x, y: seq2seq_f(x,y,True), softmax_loss_function=softmax_loss_function)
+      self.outputs, self.losses = seq2seq.model_with_buckets( self.encoder_inputs, self.decoder_inputs, targets, self.target_weights, buckets, lambda x, y: seq2seq_f(x,y,True), softmax_loss_function=softmax_loss_function)
+      print ("i'm in here")
       if output_projection is not None:
         for b in xrange(len(buckets)):
           self.outputs[b] = [ tf.matmul(output, output_projection[0]) + output_projection[1]
           for output in self.outputs[b] ]
     else:
-      self.outputs, self.losses = tf.nn.seq2seq.model_with_buckets( self.encoder_inputs, self.decoder_inputs, targets, self.target_weights, buckets, lambda x, y: seq2seq_f(x,y,False), softmax_loss_function = softmax_loss_function)
+      self.outputs, self.losses = seq2seq.model_with_buckets( self.encoder_inputs, self.decoder_inputs, targets, self.target_weights, buckets, lambda x, y: seq2seq_f(x,y,False), softmax_loss_function = softmax_loss_function)
 
     params = tf.trainable_variables()
     if not forward_only:
@@ -207,8 +208,8 @@ class Seq2SeqModel(object):
       # --> reverse operation do not performed
       # i.e., 214 532 33323 55 PAD_ID
       encoder_pad = [data_utils.PAD_ID] * (encoder_size - len(encoder_input))
-#      encoder_inputs.append(list(reversed(encoder_input + encoder_pad)))
-      encoder_inputs.append(list(encoder_input + encoder_pad))
+      encoder_inputs.append(list(reversed(encoder_input + encoder_pad)))
+#      encoder_inputs.append(list(encoder_input + encoder_pad))
 
       # Decoder inputs get an extra "GO" symbol, and are padded then.
       # i.e., GO_ID 323 242 525 123 EOS_ID PAD_ID PAD_ID PAD_ID PAD_ID
@@ -302,10 +303,12 @@ class Seq2SeqModel(object):
       output_feed = [self.losses[bucket_id]]
       for l in xrange(decoder_size):
         output_feed.append(self.outputs[bucket_id][l])
+#	print (self.outputs[bucket_id][l])
 
     outputs = session.run(output_feed, input_feed)
 
     if not forward_only:
       return outputs[1], outputs[2], None
     else:
+     # print (outputs)
       return None, outputs[0], outputs[1:]
